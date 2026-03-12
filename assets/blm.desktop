@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Layout Manager
+Comment=bspwm Layout Manager
+Exec=blm menu
+Icon=preferences-system-windows
+Terminal=false
+Type=Application
+Categories=Utility;
+Keywords=bspwm;layout;workspace;
