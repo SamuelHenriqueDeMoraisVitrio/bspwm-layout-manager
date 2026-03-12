@@ -27,5 +27,8 @@ MANIFEST
 # OS
 .DS_Store
 
+# Output
+/blm.tar.gz
+
 # Geral
 /temp_*

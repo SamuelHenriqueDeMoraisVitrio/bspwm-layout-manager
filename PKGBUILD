@@ -9,7 +9,7 @@ license=('MIT')
 depends=('python' 'bspwm' 'rofi' 'xorg-xprop')
 makedepends=('python-setuptools')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('d5558cd419c8d46bdc958064cb97f963d1ea793866414c025906ec15033512ed')
 
 build() {
     cd "$pkgname-$pkgver"
