@@ -7,7 +7,7 @@ setup(
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
     author="SamuelHenrique",
-    url="https://github.com/samuelh/bspwm-layout-manager",
+    url="https://github.com/SamuelHenriqueDeMoraisVitrio/bspwm-layout-manager",
     license="MIT",
     packages=find_packages(),
     python_requires=">=3.10",
@@ -22,7 +22,6 @@ setup(
     classifiers=[
         "Environment :: X11 Applications",
         "Intended Audience :: End Users/Desktop",
-        "License :: OSI Approved :: MIT License",
         "Operating System :: POSIX :: Linux",
         "Programming Language :: Python :: 3",
         "Topic :: Desktop Environment",
