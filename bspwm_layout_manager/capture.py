@@ -54,6 +54,19 @@ def _get_process_name(pid: int) -> str:
     return ""
 
 
+def _find_shell(pid: int) -> str:
+    """Finds the shell that is a direct child of the terminal (pid).
+    Returns its full executable path, or empty string if not found."""
+    for child_pid in get_child_processes(pid):
+        name = _get_process_name(child_pid)
+        if name in SHELLS:
+            try:
+                return os.readlink(f"/proc/{child_pid}/exe")
+            except (OSError, PermissionError):
+                return name
+    return ""
+
+
 def _find_real_process(pid: int) -> int:
     """Traverses child processes to find the first non-shell foreground process.
     Returns the original pid if no real process is found."""
@@ -77,6 +90,7 @@ def get_process_info(pid: int) -> dict:
     the first real (non-shell) foreground process and uses its cwd/command.
     """
     real_pid = _find_real_process(pid)
+    shell = _find_shell(pid)
 
     try:
         cwd = os.readlink(f"/proc/{real_pid}/cwd")
@@ -92,7 +106,7 @@ def get_process_info(pid: int) -> dict:
     except (OSError, PermissionError):
         command = ""
 
-    return {"cwd": cwd, "command": command}
+    return {"cwd": cwd, "command": command, "shell": shell}
 
 
 def get_window_class(window_id: str) -> str:
@@ -127,6 +141,7 @@ def parse_tree(node: dict, windows: list):
             "instance": client.get("instanceName", ""),
             "cwd": info["cwd"],
             "command": info["command"],
+            "shell": info.get("shell", ""),
             "pid": pid,
             "rectangle": client.get("tiledRectangle", {}),
         })

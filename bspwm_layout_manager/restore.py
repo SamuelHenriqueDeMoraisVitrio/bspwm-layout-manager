@@ -8,12 +8,13 @@ def run(cmd: list[str]) -> str:
     return result.stdout.strip()
 
 
-def get_launcher(window_class: str, cwd: str, command: str) -> list[str]:
+def get_launcher(window_class: str, cwd: str, command: str, shell: str = "") -> list[str]:
     """
     Builds the launch command for a window based on its class.
     Users can extend this to support more terminal emulators.
     """
     cls = window_class.lower()
+    sh = shell or "/bin/sh"
 
     TERMINALS = ["alacritty", "kitty", "foot", "urxvt", "xterm", "wezterm", "st"]
 
@@ -28,19 +29,25 @@ def get_launcher(window_class: str, cwd: str, command: str) -> list[str]:
         if "alacritty" in cls:
             cmd = ["alacritty", "--working-directory", cwd]
             if inner_cmd:
-                cmd += ["-e", "bash", "-c", f"{inner_cmd}; exec bash"]
+                cmd += ["-e", sh, "-c", f"{inner_cmd}; exec {sh}"]
+            else:
+                cmd += ["-e", sh]
             return cmd
 
         if "kitty" in cls:
             cmd = ["kitty", "--directory", cwd]
             if inner_cmd:
-                cmd += ["bash", "-c", f"{inner_cmd}; exec bash"]
+                cmd += [sh, "-c", f"{inner_cmd}; exec {sh}"]
+            else:
+                cmd += [sh]
             return cmd
 
         if "foot" in cls:
             cmd = ["foot", f"--working-directory={cwd}"]
             if inner_cmd:
-                cmd += ["bash", "-c", f"{inner_cmd}; exec bash"]
+                cmd += [sh, "-c", f"{inner_cmd}; exec {sh}"]
+            else:
+                cmd += [sh]
             return cmd
 
         # Generic fallback
@@ -120,7 +127,7 @@ def launch_from_tree(node: dict | None, windows: list, is_first: bool, delay: fl
         if win is None:
             return
 
-        launcher = get_launcher(win["class"], win["cwd"], win["command"])
+        launcher = get_launcher(win["class"], win["cwd"], win["command"], win.get("shell", ""))
         subprocess.Popen(launcher)
         time.sleep(delay)
         return
