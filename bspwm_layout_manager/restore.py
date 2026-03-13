@@ -1,7 +1,6 @@
 import shlex
 import subprocess
 import time
-import json
 
 
 def run(cmd: list[str]) -> str:
@@ -192,30 +191,14 @@ def restore_floating_windows(layout: dict, delay: float):
         time.sleep(delay)
         time.sleep(0.3)  # extra wait for window to fully render
 
-        # Get the specific node_id of the newly focused window
+        # Ensure window is floating
         node_id = run(["bspc", "query", "-N", "-n", "focused"])
-
         run(["bspc", "node", node_id, "-t", "floating"])
 
-        # Use wmctrl for absolute positioning/sizing
-        node_id_str = run(["bspc", "query", "-N", "-n", "focused"])
-        try:
-            window_id = hex(int(node_id_str))
+        # Move and resize using the real X11 window ID
+        window_id = run(["xdotool", "getactivewindow"])
+        if window_id:
             run(["wmctrl", "-ir", window_id, "-e", f"0,{x},{y},{w},{h}"])
-        except (ValueError, TypeError):
-            # fallback to delta method
-            node_json = run(["bspc", "query", "-T", "-n", node_id])
-            try:
-                node_data = json.loads(node_json)
-                rect_now = node_data["client"]["floatingRectangle"]
-                dx = x - rect_now["x"]
-                dy = y - rect_now["y"]
-                dw = w - rect_now["width"]
-                dh = h - rect_now["height"]
-            except (KeyError, ValueError, TypeError):
-                dx, dy, dw, dh = x, y, w, h
-            run(["bspc", "node", node_id, "-v", str(dx), str(dy)])
-            run(["bspc", "node", node_id, "--resize", "bottom-right", str(dw), str(dh)])
 
 
 def find_window(node: dict, windows: list) -> dict | None:

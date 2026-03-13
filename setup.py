@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="bspwm-layout-manager",
-    version="0.8.1",
+    version="0.9.0",
     # System dependencies (not Python packages): bspwm, bspc, rofi, wmctrl
     description="Save and restore bspwm desktop layouts with a rofi menu",
     long_description=open("README.md").read(),
