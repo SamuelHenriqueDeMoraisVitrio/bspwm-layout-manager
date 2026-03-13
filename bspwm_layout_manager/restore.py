@@ -1,3 +1,4 @@
+import shlex
 import subprocess
 import time
 import json
@@ -22,10 +23,17 @@ def get_launcher(window_class: str, cwd: str, command: str, shell: str = "") -> 
     is_terminal = any(t in cls for t in TERMINALS)
 
     if is_terminal:
-        # Try to detect what was running inside the terminal
-        # and re-launch it
+        parts = shlex.split(command) if command else []
+        binary = parts[0].split("/")[-1] if parts else ""
+        has_flags = len(parts) > 1 and any(p.startswith("-") for p in parts[1:])
         inner_cmd = extract_inner_command(command, cwd)
 
+        # If the saved command has terminal-specific flags (e.g. --class, --config-file)
+        # and no inner program was running, use it directly to preserve those flags.
+        if binary in TERMINALS and has_flags and not inner_cmd:
+            return parts
+
+        # Otherwise rebuild with inner command support
         if "alacritty" in cls:
             cmd = ["alacritty", "--working-directory", cwd]
             if inner_cmd:
@@ -181,11 +189,15 @@ def restore_floating_windows(layout: dict, delay: float):
         _apply_one_shot_rule(win_class, desktop, state="floating")
         subprocess.Popen(launcher)
         time.sleep(delay)
+        time.sleep(0.3)  # extra wait for window to fully render
 
-        run(["bspc", "node", "-t", "floating"])
+        # Get the specific node_id of the newly focused window
+        node_id = run(["bspc", "query", "-N", "-n", "focused"])
 
-        # Read actual position/size after the window opened, then apply deltas
-        node_json = run(["bspc", "query", "-T", "-n", "focused"])
+        run(["bspc", "node", node_id, "-t", "floating"])
+
+        # Read actual position/size using the specific node_id, then apply deltas
+        node_json = run(["bspc", "query", "-T", "-n", node_id])
         try:
             node_data = json.loads(node_json)
             rect_now = node_data["client"]["floatingRectangle"]
@@ -196,8 +208,8 @@ def restore_floating_windows(layout: dict, delay: float):
         except (KeyError, ValueError, TypeError):
             dx, dy, dw, dh = x, y, w, h
 
-        run(["bspc", "node", "-v", str(dx), str(dy)])
-        run(["bspc", "node", "--resize", "bottom-right", str(dw), str(dh)])
+        run(["bspc", "node", node_id, "-v", str(dx), str(dy)])
+        run(["bspc", "node", node_id, "--resize", "bottom-right", str(dw), str(dh)])
 
 
 def find_window(node: dict, windows: list) -> dict | None:
