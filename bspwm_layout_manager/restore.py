@@ -100,10 +100,11 @@ def _get_existing_rules(win_class: str) -> list[tuple[str, str]]:
     output = run(["bspc", "rule", "-l"])
     matches = []
     for line in output.splitlines():
-        parts = line.split(None, 2)
-        if len(parts) < 3:
+        parts = line.split(" => ", 1)
+        if len(parts) != 2:
             continue
-        _, selector, properties = parts
+        selector = parts[0].strip()
+        properties = parts[1].strip()
         # selector format: Class:instance:name — match by class prefix
         selector_class = selector.split(":")[0]
         if selector_class.lower() == win_class.lower():
@@ -132,7 +133,9 @@ def _remove_desktop_rule(win_class: str, saved_rules: list[tuple[str, str]]):
         return
     run(["bspc", "rule", "-r", win_class])
     for selector, properties in saved_rules:
-        run(["bspc", "rule", "-a", selector] + properties.split())
+        # only restore permanent rules (desktop=^N) — skip blm's temporary ones
+        if "desktop=^" in properties or "desktop=" not in properties:
+            run(["bspc", "rule", "-a", selector] + properties.split())
 
 
 def restore_layout(layout: dict, delay: float = 0.6):
