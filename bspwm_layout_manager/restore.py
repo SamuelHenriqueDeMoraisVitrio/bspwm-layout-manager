@@ -92,16 +92,47 @@ def extract_inner_command(command: str, cwd: str) -> str:
     return command
 
 
-def _apply_desktop_rule(win_class: str, desktop: int):
-    """Applies a temporary bspc rule to force a window to the target desktop."""
-    if win_class:
-        run(["bspc", "rule", "-a", win_class, f"desktop={desktop}"])
+def _get_existing_rules(win_class: str) -> list[tuple[str, str]]:
+    """
+    Returns existing bspc rules that match win_class as (selector, properties) pairs.
+    Used to preserve permanent rules before removing a class's rules.
+    """
+    output = run(["bspc", "rule", "-l"])
+    matches = []
+    for line in output.splitlines():
+        parts = line.split(None, 2)
+        if len(parts) < 3:
+            continue
+        _, selector, properties = parts
+        # selector format: Class:instance:name — match by class prefix
+        selector_class = selector.split(":")[0]
+        if selector_class.lower() == win_class.lower():
+            matches.append((selector, properties))
+    return matches
 
 
-def _remove_desktop_rule(win_class: str):
-    """Removes the temporary bspc rule for the given class."""
-    if win_class:
-        run(["bspc", "rule", "-r", win_class])
+def _apply_desktop_rule(win_class: str, desktop: int) -> list[tuple[str, str]]:
+    """
+    Applies a temporary bspc rule to force a window to the target desktop.
+    Returns existing rules for win_class so they can be restored afterward.
+    """
+    if not win_class:
+        return []
+    existing = _get_existing_rules(win_class)
+    run(["bspc", "rule", "-a", win_class, f"desktop={desktop}"])
+    return existing
+
+
+def _remove_desktop_rule(win_class: str, saved_rules: list[tuple[str, str]]):
+    """
+    Removes the temporary bspc rule for the given class,
+    then reapplies any permanent rules that existed before.
+    """
+    if not win_class:
+        return
+    run(["bspc", "rule", "-r", win_class])
+    for selector, properties in saved_rules:
+        run(["bspc", "rule", "-a", selector] + properties.split())
 
 
 def restore_layout(layout: dict, delay: float = 0.6):
@@ -144,10 +175,10 @@ def launch_from_tree(node: dict | None, windows: list, is_first: bool, delay: fl
         launcher = get_launcher(win["class"], win["cwd"], win["command"], win.get("shell", ""))
         win_class = win.get("class", "")
 
-        _apply_desktop_rule(win_class, desktop)
+        saved_rules = _apply_desktop_rule(win_class, desktop)
         subprocess.Popen(launcher)
         time.sleep(delay)
-        _remove_desktop_rule(win_class)
+        _remove_desktop_rule(win_class, saved_rules)
         return
 
     # It's a split node
@@ -180,14 +211,27 @@ def restore_floating_windows(layout: dict, delay: float):
         w = rect.get("width", 800)
         h = rect.get("height", 600)
 
-        _apply_desktop_rule(win_class, desktop)
+        saved_rules = _apply_desktop_rule(win_class, desktop)
         subprocess.Popen(launcher)
         time.sleep(delay)
-        _remove_desktop_rule(win_class)
+        _remove_desktop_rule(win_class, saved_rules)
 
         run(["bspc", "node", "-t", "floating"])
-        run(["bspc", "node", "-v", str(x), str(y)])
-        run(["bspc", "node", "--resize", "bottom-right", str(w), str(h)])
+
+        # Read actual position/size after the window opened, then apply deltas
+        node_json = run(["bspc", "query", "-T", "-n", "focused"])
+        try:
+            node_data = json.loads(node_json)
+            rect_now = node_data["client"]["floatingRectangle"]
+            dx = x - rect_now["x"]
+            dy = y - rect_now["y"]
+            dw = w - rect_now["width"]
+            dh = h - rect_now["height"]
+        except (KeyError, ValueError, TypeError):
+            dx, dy, dw, dh = x, y, w, h
+
+        run(["bspc", "node", "-v", str(dx), str(dy)])
+        run(["bspc", "node", "--resize", "bottom-right", str(dw), str(dh)])
 
 
 def find_window(node: dict, windows: list) -> dict | None:
