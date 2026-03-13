@@ -92,57 +92,15 @@ def extract_inner_command(command: str, cwd: str) -> str:
     return command
 
 
-def _get_existing_rules(win_class: str) -> list[tuple[str, str]]:
-    """
-    Returns existing bspc rules that match win_class as (selector, properties) pairs.
-    Used to preserve permanent rules before removing a class's rules.
-    """
-    output = run(["bspc", "rule", "-l"])
-    matches = []
-    for line in output.splitlines():
-        parts = line.split(" => ", 1)
-        if len(parts) != 2:
-            continue
-        selector = parts[0].strip()
-        properties = parts[1].strip()
-        # selector format: Class:instance:name — match by class prefix
-        selector_class = selector.split(":")[0]
-        if selector_class.lower() == win_class.lower():
-            matches.append((selector, properties))
-    return matches
-
-
-def _apply_desktop_rule(win_class: str, desktop: int, state: str = "") -> list[tuple[str, str]]:
-    """
-    Applies a temporary bspc rule to force a window to the target desktop.
-    Removes existing rules for win_class first so the temporary rule is not
-    overridden by a permanent one. Returns the removed rules so they can be
-    restored afterward.
-    state can be "tiled", "floating", or "" (no state override).
-    """
+def _apply_one_shot_rule(win_class: str, desktop: int, state: str = ""):
+    """Applies a one-shot bspc rule for the next matching window only.
+    Does not touch permanent rules."""
     if not win_class:
-        return []
-    existing = _get_existing_rules(win_class)
-    run(["bspc", "rule", "-r", win_class])
-    rule = ["bspc", "rule", "-a", win_class, f"desktop=^{desktop}"]
+        return
+    rule = ["bspc", "rule", "-a", win_class, "--one-shot", f"desktop=^{desktop}"]
     if state:
         rule.append(f"state={state}")
     run(rule)
-    return existing
-
-
-def _remove_desktop_rule(win_class: str, saved_rules: list[tuple[str, str]]):
-    """
-    Removes the temporary bspc rule for the given class,
-    then reapplies any permanent rules that existed before.
-    """
-    if not win_class:
-        return
-    run(["bspc", "rule", "-r", win_class])
-    for selector, properties in saved_rules:
-        # only restore permanent rules (desktop=^N) — skip blm's temporary ones
-        if "desktop=^" in properties or "desktop=" not in properties:
-            run(["bspc", "rule", "-a", selector] + properties.split())
 
 
 def restore_layout(layout: dict, delay: float = 0.6):
@@ -185,10 +143,9 @@ def launch_from_tree(node: dict | None, windows: list, is_first: bool, delay: fl
         launcher = get_launcher(win["class"], win["cwd"], win["command"], win.get("shell", ""))
         win_class = win.get("class", "")
 
-        saved_rules = _apply_desktop_rule(win_class, desktop, state="tiled")
+        _apply_one_shot_rule(win_class, desktop, state="tiled")
         subprocess.Popen(launcher)
         time.sleep(delay)
-        _remove_desktop_rule(win_class, saved_rules)
         return
 
     # It's a split node
@@ -221,10 +178,9 @@ def restore_floating_windows(layout: dict, delay: float):
         w = rect.get("width", 800)
         h = rect.get("height", 600)
 
-        saved_rules = _apply_desktop_rule(win_class, desktop, state="floating")
+        _apply_one_shot_rule(win_class, desktop, state="floating")
         subprocess.Popen(launcher)
         time.sleep(delay)
-        _remove_desktop_rule(win_class, saved_rules)
 
         run(["bspc", "node", "-t", "floating"])
 
