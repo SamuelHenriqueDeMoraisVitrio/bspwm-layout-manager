@@ -28,3 +28,4 @@ setup(
         "Topic :: Desktop Environment",
     ],
 )
+
