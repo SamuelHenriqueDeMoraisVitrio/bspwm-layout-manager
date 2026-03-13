@@ -112,15 +112,22 @@ def _get_existing_rules(win_class: str) -> list[tuple[str, str]]:
     return matches
 
 
-def _apply_desktop_rule(win_class: str, desktop: int) -> list[tuple[str, str]]:
+def _apply_desktop_rule(win_class: str, desktop: int, state: str = "") -> list[tuple[str, str]]:
     """
     Applies a temporary bspc rule to force a window to the target desktop.
-    Returns existing rules for win_class so they can be restored afterward.
+    Removes existing rules for win_class first so the temporary rule is not
+    overridden by a permanent one. Returns the removed rules so they can be
+    restored afterward.
+    state can be "tiled", "floating", or "" (no state override).
     """
     if not win_class:
         return []
     existing = _get_existing_rules(win_class)
-    run(["bspc", "rule", "-a", win_class, f"desktop={desktop}"])
+    run(["bspc", "rule", "-r", win_class])
+    rule = ["bspc", "rule", "-a", win_class, f"desktop={desktop}"]
+    if state:
+        rule.append(f"state={state}")
+    run(rule)
     return existing
 
 
@@ -178,7 +185,7 @@ def launch_from_tree(node: dict | None, windows: list, is_first: bool, delay: fl
         launcher = get_launcher(win["class"], win["cwd"], win["command"], win.get("shell", ""))
         win_class = win.get("class", "")
 
-        saved_rules = _apply_desktop_rule(win_class, desktop)
+        saved_rules = _apply_desktop_rule(win_class, desktop, state="tiled")
         subprocess.Popen(launcher)
         time.sleep(delay)
         _remove_desktop_rule(win_class, saved_rules)
@@ -214,7 +221,7 @@ def restore_floating_windows(layout: dict, delay: float):
         w = rect.get("width", 800)
         h = rect.get("height", 600)
 
-        saved_rules = _apply_desktop_rule(win_class, desktop)
+        saved_rules = _apply_desktop_rule(win_class, desktop, state="floating")
         subprocess.Popen(launcher)
         time.sleep(delay)
         _remove_desktop_rule(win_class, saved_rules)
