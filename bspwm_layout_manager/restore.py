@@ -105,7 +105,8 @@ def _apply_one_shot_rule(win_class: str, desktop: int, state: str = ""):
     Does not touch permanent rules."""
     if not win_class:
         return
-    rule = ["bspc", "rule", "-a", win_class, "--one-shot", f"desktop=^{desktop}"]
+    rule = ["bspc", "rule", "-a", win_class, "--one-shot",
+            f"desktop=^{desktop}", "follow=on", "focus=on"]
     if state:
         rule.append(f"state={state}")
     run(rule)
@@ -196,20 +197,25 @@ def restore_floating_windows(layout: dict, delay: float):
 
         run(["bspc", "node", node_id, "-t", "floating"])
 
-        # Read actual position/size using the specific node_id, then apply deltas
-        node_json = run(["bspc", "query", "-T", "-n", node_id])
+        # Use wmctrl for absolute positioning/sizing
+        node_id_str = run(["bspc", "query", "-N", "-n", "focused"])
         try:
-            node_data = json.loads(node_json)
-            rect_now = node_data["client"]["floatingRectangle"]
-            dx = x - rect_now["x"]
-            dy = y - rect_now["y"]
-            dw = w - rect_now["width"]
-            dh = h - rect_now["height"]
-        except (KeyError, ValueError, TypeError):
-            dx, dy, dw, dh = x, y, w, h
-
-        run(["bspc", "node", node_id, "-v", str(dx), str(dy)])
-        run(["bspc", "node", node_id, "--resize", "bottom-right", str(dw), str(dh)])
+            window_id = hex(int(node_id_str))
+            run(["wmctrl", "-ir", window_id, "-e", f"0,{x},{y},{w},{h}"])
+        except (ValueError, TypeError):
+            # fallback to delta method
+            node_json = run(["bspc", "query", "-T", "-n", node_id])
+            try:
+                node_data = json.loads(node_json)
+                rect_now = node_data["client"]["floatingRectangle"]
+                dx = x - rect_now["x"]
+                dy = y - rect_now["y"]
+                dw = w - rect_now["width"]
+                dh = h - rect_now["height"]
+            except (KeyError, ValueError, TypeError):
+                dx, dy, dw, dh = x, y, w, h
+            run(["bspc", "node", node_id, "-v", str(dx), str(dy)])
+            run(["bspc", "node", node_id, "--resize", "bottom-right", str(dw), str(dh)])
 
 
 def find_window(node: dict, windows: list) -> dict | None:
