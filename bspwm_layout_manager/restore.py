@@ -124,7 +124,7 @@ def _apply_desktop_rule(win_class: str, desktop: int, state: str = "") -> list[t
         return []
     existing = _get_existing_rules(win_class)
     run(["bspc", "rule", "-r", win_class])
-    rule = ["bspc", "rule", "-a", win_class, f"desktop^={desktop}"]
+    rule = ["bspc", "rule", "-a", win_class, f"desktop=^{desktop}"]
     if state:
         rule.append(f"state={state}")
     run(rule)
