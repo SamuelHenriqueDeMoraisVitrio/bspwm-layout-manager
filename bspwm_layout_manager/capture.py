@@ -119,8 +119,10 @@ def get_window_class(window_id: str) -> str:
         return ""
 
 
-def parse_tree(node: dict, windows: list):
-    """Recursively walks the bspwm tree and collects window nodes."""
+def parse_tree(node: dict, windows: list, floating_windows: list):
+    """Recursively walks the bspwm tree and collects window nodes.
+    Tiled windows go into `windows`, floating windows go into `floating_windows`.
+    """
     if node is None:
         return
 
@@ -130,8 +132,18 @@ def parse_tree(node: dict, windows: list):
         pid = get_window_pid(window_id)
         info = get_process_info(pid) if pid else {"cwd": str(Path.home()), "command": ""}
 
-        # Skip floating windows
         if client.get("state") == "floating":
+            floating_windows.append({
+                "node_id": node["id"],
+                "window_id": window_id,
+                "class": client.get("className", ""),
+                "instance": client.get("instanceName", ""),
+                "cwd": info["cwd"],
+                "command": info["command"],
+                "shell": info.get("shell", ""),
+                "pid": pid,
+                "floatingRectangle": client.get("floatingRectangle", {}),
+            })
             return
 
         windows.append({
@@ -147,8 +159,8 @@ def parse_tree(node: dict, windows: list):
         })
         return
 
-    parse_tree(node.get("firstChild"), windows)
-    parse_tree(node.get("secondChild"), windows)
+    parse_tree(node.get("firstChild"), windows, floating_windows)
+    parse_tree(node.get("secondChild"), windows, floating_windows)
 
 
 def capture_splits(node: dict) -> dict | None:
@@ -197,7 +209,8 @@ def capture_current_desktop() -> dict:
 
     # Collect windows in order
     windows = []
-    parse_tree(tree.get("root"), windows)
+    floating_windows = []
+    parse_tree(tree.get("root"), windows, floating_windows)
 
     # Capture split structure
     splits = capture_splits(tree.get("root"))
@@ -210,6 +223,7 @@ def capture_current_desktop() -> dict:
         "desktop_name": desktop_name,
         "gap": tree.get("windowGap", 10),
         "windows": windows,
+        "floating_windows": floating_windows,
         "splits": splits,
         "window_map": window_map,
     }

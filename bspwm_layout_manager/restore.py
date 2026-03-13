@@ -92,6 +92,18 @@ def extract_inner_command(command: str, cwd: str) -> str:
     return command
 
 
+def _apply_desktop_rule(win_class: str, desktop: int):
+    """Applies a temporary bspc rule to force a window to the target desktop."""
+    if win_class:
+        run(["bspc", "rule", "-a", win_class, f"desktop={desktop}"])
+
+
+def _remove_desktop_rule(win_class: str):
+    """Removes the temporary bspc rule for the given class."""
+    if win_class:
+        run(["bspc", "rule", "-r", win_class])
+
+
 def restore_layout(layout: dict, delay: float = 0.6):
     """
     Restores a saved layout by launching apps and organizing them
@@ -107,13 +119,15 @@ def restore_layout(layout: dict, delay: float = 0.6):
 
     if not windows:
         print("No windows to restore.")
-        return
+    else:
+        # Launch windows in order using split preselections
+        launch_from_tree(splits, windows, is_first=True, delay=delay, desktop=desktop)
 
-    # Launch windows in order using split preselections
-    launch_from_tree(splits, windows, is_first=True, delay=delay)
+    # Restore floating windows after tiled ones
+    restore_floating_windows(layout, delay)
 
 
-def launch_from_tree(node: dict | None, windows: list, is_first: bool, delay: float):
+def launch_from_tree(node: dict | None, windows: list, is_first: bool, delay: float, desktop: int):
     """
     Recursively walks the split tree and launches windows in the correct order,
     using bspc preselection to control placement.
@@ -128,8 +142,12 @@ def launch_from_tree(node: dict | None, windows: list, is_first: bool, delay: fl
             return
 
         launcher = get_launcher(win["class"], win["cwd"], win["command"], win.get("shell", ""))
+        win_class = win.get("class", "")
+
+        _apply_desktop_rule(win_class, desktop)
         subprocess.Popen(launcher)
         time.sleep(delay)
+        _remove_desktop_rule(win_class)
         return
 
     # It's a split node
@@ -138,14 +156,38 @@ def launch_from_tree(node: dict | None, windows: list, is_first: bool, delay: fl
     direction = "east" if split_type == "vertical" else "south"
 
     # Launch first child
-    launch_from_tree(node.get("first"), windows, is_first=True, delay=delay)
+    launch_from_tree(node.get("first"), windows, is_first=True, delay=delay, desktop=desktop)
 
     # Preselect for second child
     run(["bspc", "node", "-p", direction])
     run(["bspc", "node", "-o", str(ratio)])
 
     # Launch second child
-    launch_from_tree(node.get("second"), windows, is_first=False, delay=delay)
+    launch_from_tree(node.get("second"), windows, is_first=False, delay=delay, desktop=desktop)
+
+
+def restore_floating_windows(layout: dict, delay: float):
+    """Launches floating windows and restores their position and size."""
+    floating_windows = layout.get("floating_windows", [])
+    desktop = layout.get("desktop", 1)
+
+    for win in floating_windows:
+        launcher = get_launcher(win["class"], win["cwd"], win["command"], win.get("shell", ""))
+        win_class = win.get("class", "")
+        rect = win.get("floatingRectangle", {})
+        x = rect.get("x", 0)
+        y = rect.get("y", 0)
+        w = rect.get("width", 800)
+        h = rect.get("height", 600)
+
+        _apply_desktop_rule(win_class, desktop)
+        subprocess.Popen(launcher)
+        time.sleep(delay)
+        _remove_desktop_rule(win_class)
+
+        run(["bspc", "node", "-t", "floating"])
+        run(["bspc", "node", "-v", str(x), str(y)])
+        run(["bspc", "node", "--resize", "bottom-right", str(w), str(h)])
 
 
 def find_window(node: dict, windows: list) -> dict | None:
