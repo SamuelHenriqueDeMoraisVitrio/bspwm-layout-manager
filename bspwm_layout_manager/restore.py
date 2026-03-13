@@ -103,6 +103,22 @@ def _apply_one_shot_rule(win_class: str, desktop: int, state: str = ""):
     run(rule)
 
 
+def _resize_to(target_w: int, target_h: int, max_attempts: int = 10):
+    """Resizes the focused floating window to the given absolute dimensions."""
+    for _ in range(max_attempts):
+        node_json = run(["bspc", "query", "-T", "-n", "focused"])
+        try:
+            node_data = json.loads(node_json)
+            rect_now = node_data["client"]["floatingRectangle"]
+            dw = target_w - rect_now["width"]
+            dh = target_h - rect_now["height"]
+            if dw == 0 and dh == 0:
+                break
+            run(["bspc", "node", "--resize", "bottom-right", str(dw), str(dh)])
+        except (KeyError, ValueError, TypeError):
+            break
+
+
 def restore_layout(layout: dict, delay: float = 0.6):
     """
     Restores a saved layout by launching apps and organizing them
@@ -110,11 +126,11 @@ def restore_layout(layout: dict, delay: float = 0.6):
     """
     windows = layout.get("windows", [])
     splits = layout.get("splits")
-    desktop = layout.get("desktop", 1)
 
-    # Switch to target desktop
-    run(["bspc", "desktop", "-f", str(desktop)])
-    time.sleep(0.3)
+    # Use the currently focused desktop instead of the saved one
+    current = run(["bspc", "query", "-D", "--names", "-d", "focused"]).strip()
+    all_desktops = run(["bspc", "query", "-D", "--names"]).splitlines()
+    desktop = all_desktops.index(current) + 1 if current in all_desktops else 1
 
     if not windows:
         print("No windows to restore.")
@@ -123,7 +139,7 @@ def restore_layout(layout: dict, delay: float = 0.6):
         launch_from_tree(splits, windows, is_first=True, delay=delay, desktop=desktop)
 
     # Restore floating windows after tiled ones
-    restore_floating_windows(layout, delay)
+    restore_floating_windows(layout, delay, desktop)
 
 
 def launch_from_tree(node: dict | None, windows: list, is_first: bool, delay: float, desktop: int):
@@ -164,10 +180,9 @@ def launch_from_tree(node: dict | None, windows: list, is_first: bool, delay: fl
     launch_from_tree(node.get("second"), windows, is_first=False, delay=delay, desktop=desktop)
 
 
-def restore_floating_windows(layout: dict, delay: float):
+def restore_floating_windows(layout: dict, delay: float, desktop: int):
     """Launches floating windows and restores their position and size."""
     floating_windows = layout.get("floating_windows", [])
-    desktop = layout.get("desktop", 1)
 
     for win in floating_windows:
         launcher = get_launcher(win["class"], win["cwd"], win["command"], win.get("shell", ""))
@@ -184,20 +199,18 @@ def restore_floating_windows(layout: dict, delay: float):
 
         run(["bspc", "node", "-t", "floating"])
 
-        # Read actual position/size after the window opened, then apply deltas
+        # Move to saved position
         node_json = run(["bspc", "query", "-T", "-n", "focused"])
         try:
             node_data = json.loads(node_json)
             rect_now = node_data["client"]["floatingRectangle"]
             dx = x - rect_now["x"]
             dy = y - rect_now["y"]
-            dw = w - rect_now["width"]
-            dh = h - rect_now["height"]
         except (KeyError, ValueError, TypeError):
-            dx, dy, dw, dh = x, y, w, h
+            dx, dy = x, y
 
         run(["bspc", "node", "-v", str(dx), str(dy)])
-        run(["bspc", "node", "--resize", "bottom-right", str(dw), str(dh)])
+        _resize_to(w, h)
 
 
 def find_window(node: dict, windows: list) -> dict | None:
